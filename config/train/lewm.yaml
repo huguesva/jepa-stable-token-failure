@@ -1,0 +1,89 @@
+# LeWM training config for the stable-nuisance experiment.
+# Identical to upstream config/train/lewm.yaml except for the `nuisance`,
+# `run_dir`, `cache_dir` and `max_episodes` blocks, which are experiment
+# plumbing and do not touch the model or the objective.
+defaults:
+  - _self_
+  - data: pusht
+  - model: lewm
+
+output_model_name: lewm
+run_dir: ???
+cache_dir: null
+max_episodes: null
+
+num_workers: 6
+train_split: 0.9
+seed: 3072
+img_size: 224
+embed_dim: 192
+history_size: 3
+
+# Task-irrelevant visual nuisance. `clean` reproduces upstream exactly.
+# `pad` grows the input to 224 + 2*border and keeps the scene at native
+# resolution, so the matched-geometry `neutral` control is nearly free; `shrink`
+# keeps the input at 224 but costs scene resolution (32 points on PushT).
+nuisance:
+  condition: clean        # clean | neutral | persistent | fast | markov
+  mode: pad               # pad | shrink
+  border: 14              # px per side; 224 -> 252 = 18 patches of 14
+  ring: 0                 # painted width; 0 = whole border. Sweeps area at fixed geometry
+  geometry: tile          # tile = perimeter arcs (area knob) | patch = whole cells (token knob)
+  n_tiles: 16             # tile geometry: latent dim = 3 * n_tiles
+  n_patches: 4            # patch geometry: painted tokens, latent dim = 3 * n_patches
+  patch_size: 14          # must match the ViT patch size
+  amplitude: 1.0
+  persistence: 0          # 0 = whole episode, 1 = every frame, k = every k frames
+  rho: 1.0                # markov: retention probability (1 = stable, 0 = iid)
+  frame_unit: raw         # raw = legacy dataset frames | model = frames the JEPA sees
+  base_seed: 20260922
+  stream: 0               # 0 = training stream
+
+ckpt_every: 1
+
+# PushT has ~1.98M training clips, i.e. ~15.5k optimiser steps per true epoch.
+# `limit_train_batches` turns an "epoch" into a fixed step budget so that the
+# compute cost of a run is controlled exactly and every condition gets the
+# identical number of gradient steps.
+trainer:
+  max_epochs: 10
+  limit_train_batches: 1.0
+  limit_val_batches: 50
+  devices: auto
+  accelerator: gpu
+  precision: bf16
+  gradient_clip_val: 1.0
+
+loader:
+  batch_size: 128
+  num_workers: ${num_workers}
+  persistent_workers: True
+  prefetch_factor: 3
+  pin_memory: True
+
+optimizer:
+  type: AdamW
+  lr: 5e-5
+  weight_decay: 1e-3
+
+num_preds: 1
+
+loss:
+  sigreg:
+    weight: 0.09
+    kwargs:
+      knots: 17
+      num_proj: 1024
+
+wandb:
+  enabled: False
+  config:
+    entity: null
+    project: lewm-nuisance
+    name: ${output_model_name}
+    mode: offline
+
+hydra:
+  run:
+    dir: ${run_dir}/hydra
+  output_subdir: null

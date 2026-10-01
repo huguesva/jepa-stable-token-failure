@@ -1,0 +1,74 @@
+# Planning evaluation on PushT. Mirrors upstream config/eval/pusht.yaml, with
+# the nuisance block and JSON output added.
+defaults:
+  - solver: cem
+  - _self_
+
+world:
+  env_name: swm/PushT-v1
+  num_envs: ${eval.num_eval}
+  max_episode_steps: ???
+
+dataset:
+  stats: ${eval.dataset_name}
+  keys_to_cache:
+    - action
+    - proprio
+    - state
+
+seed: 42
+policy: ???
+cache_dir: null
+
+plan_config:
+  horizon: 5
+  receding_horizon: 5
+  action_block: 5
+
+eval:
+  num_eval: 50
+  goal_offset_steps: 25
+  eval_budget: 50
+  render_size: 224      # environment render; the nuisance may enlarge the model input
+  dataset_name: pusht_expert_train
+  goal_nuisance: matched   # matched | independent
+  callables:
+    # -- set state
+    - method: _set_state
+      args:
+        state:
+          value: state
+    # -- set goal state
+    - method: _set_goal_state
+      args:
+        goal_state:
+          value: goal_state
+
+nuisance:
+  condition: clean
+  mode: pad
+  border: 14
+  ring: 0
+  geometry: tile
+  n_tiles: 16
+  n_patches: 4
+  patch_size: 14
+  amplitude: 1.0
+  persistence: 0
+  rho: 1.0
+  # The evaluation policy already counts model frames, so no conversion is
+  # needed here; `frame_unit` only tells the HDF5 loader what to do.
+  frame_unit: model
+  base_seed: 20260922
+  stream: 1                # 1 = evaluation stream (disjoint from training)
+
+output:
+  dir: ???
+  tag: eval
+  filename: pusht_results.txt
+  save_video: false
+
+hydra:
+  run:
+    dir: ${output.dir}/hydra
+  output_subdir: null
